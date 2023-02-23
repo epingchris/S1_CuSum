@@ -2,14 +2,14 @@
 import os, glob
 import xarray as xr
 import rioxarray as rxr
-import datetime
+import datetime as dt
 import pandas as pd
 
 import pyproj
 pyproj.datadir.set_data_dir(r'C:\\Users\\E-Ping Rau\\anaconda3\\pkgs\\proj-9.1.1-heca977f_2\\Library\\share\\proj')
 
-# Convert Image Collection to xarray ----
 #%%
+# Convert Image Collection to xarray ----
 #list all downloaded images
 outdir = '.\\s1_gfla\\'
 vv_tifs = os.listdir(outdir)
@@ -23,17 +23,61 @@ date_list = []
 for i, path in enumerate(file_list):
     date_list.append(path.replace('.\\s1_gfla\\s1_gfla_', '').replace('.tif', '').replace('_', '-'))
 
-# loop through the list, open image as xarray and assign time label
-list_da = []
-
+#%%
+# Loop through the list, open image as xarray and assign time label ----
 index = 0
 for file, date in zip(file_list, date_list):
     da = rxr.open_rasterio(file, masked = True)
-    dt = datetime.datetime.strptime(date, '%Y-%m-%d')
+    dt = dt.datetime.strptime(date, '%Y-%m-%d')
     dt = pd.to_datetime(dt)
     da = da.assign_coords(time = dt)
     da = da.expand_dims(dim = 'time')
     list_da.append(da)
+    print(str(index) + ' successful\n')
+    index += 1
+
+#when using rioxarray to load, errors may arise because PROJ library path is not set
+#check this: https://gis.stackexchange.com/questions/363743/initalize-pyproj-correctly
+
+#stack data arrays in list
+ds = xr.combine_by_coords(list_da)
+
+#%%
+# Use intervals ----
+#find intervals of 360 days
+interv = [0]
+i = 0
+j = 1
+day_diff = 0
+while True:
+    a = dt.datetime.strptime(date_list[i], '%Y-%m-%d')
+    b = dt.datetime.strptime(date_list[j], '%Y-%m-%d')
+    day_diff = int((b - a) / dt.timedelta(days = 1))
+    if day_diff >= 360:
+        interv.append(j)
+        i = j
+        continue
+    j += 1
+    if j == len(date_list):
+        if(interv[-1] != j - 1):
+            interv.append(j - 1)
+        break
+
+#check
+[str(dt.datetime.strptime(date_list[i], '%Y-%m-%d')) + ' ; ' for i in interv]
+
+#loop through the list in intervals, open image as xarray and assign time label
+list_da = []
+
+index = 0
+for i in range(0, len(interv)):
+    file_chunk = file_list[interv[i]:interv[i + 1]]
+    date_chunk = date_list[interv[i]:interv[i + 1]]
+    da_chunk = xr.concat([rxr.open_rasterio(file, masked = True) for file in file_chunk], dim = 'time')
+    dt_chunk = [dt.datetime.strptime(date, '%Y-%m-%d') for date in date_chunk]
+    dt_chunk = [pd.to_datetime(dt) for dt in dt_chunk]
+    da_chunk = da_chunk.assign_coords(time = dt_chunk)
+    list_da.append(da_chunk)
     print(str(index) + ' successful\n')
     index += 1
 
