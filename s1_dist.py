@@ -1,12 +1,11 @@
 #%%
 import ee
+ee.Authenticate()
 ee.Initialize()
 
 import geemap
-import os
-import xarray as xr
-import rioxarray
 import numpy as np
+
 
 #%%
 #convert from sigma_0 to gamma_0
@@ -39,9 +38,11 @@ crs = 'EPSG:4326'
 #%%
 # define your area of interest
 
-aoi_shp = 'test.shp'
+#aoi_shp = 'test.shp'
 #aoi_shp = 'gadm41_GUF_0.shp'
+aoi_shp = 'gf_lidar_area.shp'
 aoi = geemap.shp_to_ee(aoi_shp)
+aoi_geometry = aoi.geometry()
 
 # choose a path for your output directory. This is where you will have saved all the images in the collection
 
@@ -70,7 +71,7 @@ date_list = unique_dates.getInfo()
 #mosaic images with same date
 vv_mosaic = mosaicByDate(vv)
 mosaic_size = vv_mosaic.size().getInfo()
-print('size of Image Stack after mosaicking: ' ,mosaic_size)
+print('size of Image Stack after mosaicking: ' , mosaic_size)
 
 #%%
 #aaa = vv_mosaic.first()
@@ -80,18 +81,22 @@ print('size of Image Stack after mosaicking: ' ,mosaic_size)
 #Map
 
 #%%
-#export Image Collection to Google Drive
+#turn to lists to batch export
 vv_mosaic_list = vv_mosaic.toList(vv_mosaic.size())
 
+#export Image Collection to Google Drive
 for i in range(vv_mosaic_list.length().getInfo()):
     image = ee.Image(vv_mosaic_list.get(i))
-    id = image.id()
-    img_name = id.replace('/', '_')
+    date = image.getInfo()['id']
+    print('date is', date)
+    date_format = date.replace("-", "_")
+    img_name = 's1_gfla_{}'.format(date_format)
+    print('image name is', img_name)
     export_task = ee.batch.Export.image.toDrive(
         image=image,
-        description='s1_test',
+        description=img_name,
         folder='s1_dist_gf',
-        region=aoi,
+        region=aoi_geometry,
         scale=10,
         crs='EPSG:4326',
         maxPixels=1e13,
